@@ -1,12 +1,41 @@
 use rayon::prelude::*;
 use std::sync::{Arc, Mutex};
-use ndarray::prelude::*;
 use ndarray::Array3;
-use ndarray::Array;
 use video_rs::encode::{Encoder, Settings};
 use video_rs::time::Time;
 use std::path::Path;
+use indicatif::ProgressBar;
+use serde::{Deserialize};
+use toml;
+use std::fs;
+use std::process::exit;
 
+#[derive(Debug, Deserialize)]
+struct VideoFrames {
+    frames: Vec<FrameMeta>,
+    transitions : Vec<Transition>
+}
+
+impl VideoFrames {
+    fn construct_all_frames(&self) -> Vec<FrameMeta> {
+        let mut all_frames : Vec<FrameMeta> = Vec::new(); 
+
+        for transition in &self.transitions {
+            all_frames.extend(interpolate_frames(&self.frames[transition.from_frame], &self.frames[transition.to_frame], transition.steps, &transition.interpolation_type));
+        }
+
+        all_frames
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct Transition {
+    from_frame : usize, 
+    to_frame : usize,
+    interpolation_type : InterpolationType,
+    steps : usize
+}
+#[derive(Debug, Deserialize)]
 struct FrameMeta {
     max_iterations : usize, 
     x_pos : f64, 
@@ -15,79 +44,133 @@ struct FrameMeta {
     color_gradient_shift : f64
 }
 
-fn interpolate_linear(frame_1 : FrameMeta, frame_2 : FrameMeta, steps : usize) -> Vec<FrameMeta> {
+impl PartialEq for FrameMeta {
+    fn eq(&self, other: &FrameMeta) -> bool {
+
+        // We deliberatively do not want to check for the color gradient values when we check for
+        // equality.
+        self.max_iterations == other.max_iterations && self.x_pos == other.x_pos && self.y_pos == other.y_pos && self.radius == other.radius
+    }
+}
+
+fn lerp(a : f64, b : f64, t : f64) -> f64 {
+    (a  * (1.0 - t)) + (b * t)
+}
+
+fn ease_in_out_quart(time : f64) -> f64{
+    if time < 0.5 {8.0 * time.powi(4)} else {1.0 - (-2.0 * time + 2.0).powi(4) / 2.0}
+}
+
+fn ease_in_out_cubic(time : f64) -> f64 {
+    if time < 0.5 {4.0 * time.powi(3)} else {1.0 - (-2.0 * time + 2.0).powi(3) / 2.0}
+}
+
+fn create_frame_from_lerp(from : &FrameMeta, to : &FrameMeta, time : f64) -> FrameMeta {
+
+    let mi : f64 = lerp(from.max_iterations as f64, to.max_iterations as f64, time); 
+    let x_pos : f64 = lerp(from.x_pos, to.x_pos, time); 
+    let y_pos : f64 = lerp(from.y_pos, to.y_pos, time); 
+    let radius : f64 = lerp(from.radius, to.radius, time); 
+    let color_gradient_shift : f64 = lerp(from.color_gradient_shift, to.color_gradient_shift, time); 
+
+    FrameMeta {
+            max_iterations : mi.round() as usize,
+            x_pos,
+            y_pos,
+            radius,
+            color_gradient_shift
+    }
+}
+
+#[derive(Debug, Deserialize)]
+enum InterpolationType {
+    Linear,
+    InOutQuart,
+    InOutCubic
+}
+
+fn interpolate_frames(frame_1 : &FrameMeta, frame_2 : &FrameMeta, steps : usize, mode : &InterpolationType) -> Vec<FrameMeta> {
     
-    let max_iterations_step = (frame_1.max_iterations as f64 - frame_2.max_iterations as f64) / steps as f64; 
-    let x_pos_step = (frame_1.x_pos - frame_2.x_pos) / steps as f64;
-    let y_pos_step = (frame_1.y_pos - frame_2.y_pos) / steps as f64;
-    let radius_step = (frame_1.radius - frame_2.radius) / steps as f64;
-    let color_gradient_shift_step = (frame_1.color_gradient_shift - frame_2.color_gradient_shift) / steps as f64;
+
+    let mut all_steps : Vec<f64> = Vec::new(); 
+
+    for step in 0 .. steps {
+        all_steps.push((step as f64) * (1.0 / (steps as f64))); 
+    }
 
     let mut all_frames : Vec<FrameMeta> = Vec::new();
     
     for step in 0 .. steps {
+        
+        let t : f64 = match mode {
+            InterpolationType::Linear => all_steps[step],
+            InterpolationType::InOutQuart => ease_in_out_quart(all_steps[step]),
+            InterpolationType::InOutCubic => ease_in_out_cubic(all_steps[step])
+        };
 
-        all_frames.push(FrameMeta{
-            max_iterations : frame_1.max_iterations + (max_iterations_step * (step as f64)) as usize,
-            x_pos : frame_1.x_pos + x_pos_step * (step as f64),
-            y_pos : frame_1.y_pos + y_pos_step * (step as f64),
-            radius : frame_1.radius + radius_step * (step as f64),
-            color_gradient_shift : frame_1.color_gradient_shift + color_gradient_shift_step * (step as f64)
-        });
+        all_frames.push(create_frame_from_lerp(&frame_1, &frame_2, t));
     }
     all_frames
 }
 
 fn main() {
+    
+    // Reading and parsing frames from the toml file
+    let frames_file = "frames.toml"; 
+    let frames_file_content = match fs::read_to_string(frames_file) {
+        Ok(c) => c, 
+        Err(_) => {
+            eprintln!("Could not read the file!"); 
+            exit(1); 
+        }
+    };
+    let video_frames : VideoFrames = match toml::from_str(&frames_file_content) {
+        Ok(d) => d,
+        Err(_) => {
+            eprintln!("Unable to parse file content!"); 
+            exit(1);
+        }
+    };
+    let frames = video_frames.construct_all_frames(); 
 
     let x_size : usize = 3200; 
     let y_size : usize = 1800; 
-    let max_iterations : usize = 28;
-
-    let x_pos = -0.16;
-    let y_pos = 1.0405; 
-    let radius = 0.01; 
 
     let color_gradient = colorgrad::sinebow(); 
-    let color_gradient_shift = 0.4;
-
-    let start_frame : FrameMeta = FrameMeta{
-        max_iterations: 28,
-        x_pos: -0.16,
-        y_pos: 1.0405,
-        radius: 0.01,
-        color_gradient_shift: 0.0
-    };
-
-    let end_frame : FrameMeta = FrameMeta{
-        max_iterations: 28,
-        x_pos: -0.14,
-        y_pos: 1.0405,
-        radius: 0.01,
-        color_gradient_shift: 0.7
-    };
-
-    let frames = interpolate_linear(start_frame, end_frame, 60);
 
     let settings = Settings::preset_h264_yuv420p(x_size, y_size, false);
     let mut encoder = Encoder::new(Path::new("mandelbrot.mp4"), settings).expect("Failed to create encoder");
 
     let duration: Time = Time::from_nth_of_a_second(60);
     let mut position = Time::zero();
+    
+    let progress_bar = ProgressBar::new(frames.len() as u64); 
+    
+    let mut current_frame_meta : &FrameMeta = &frames[0]; 
+    let mut buffer = create_mandelbrot_buffer_image(frames[0].max_iterations, x_size, y_size, frames[0].x_pos, frames[0].y_pos, frames[0].radius); 
 
-    for (i, f) in frames.iter().enumerate() {
-        let buffer = create_mandelbrot_buffer_image(f.max_iterations, x_size, y_size, f.x_pos, f.y_pos, f.radius); 
-        let frame = create_frame(i, x_size, y_size, f.max_iterations, buffer, &color_gradient, f.color_gradient_shift); 
+    for f in frames.iter() {
+        
+        if f != current_frame_meta {
+            buffer = create_mandelbrot_buffer_image(f.max_iterations, x_size, y_size, f.x_pos, f.y_pos, f.radius);
+            current_frame_meta = f;
+        }
 
-        encoder.encode(&frame, position).expect("Failed to encode video!"); 
+        let frame = create_frame(x_size, y_size, f.max_iterations, &buffer, &color_gradient, f.color_gradient_shift); 
+        
+        encoder.encode(&frame, position).expect("Failed to encode video!");
 
         position = position.aligned_with(duration).add(); 
+
+        progress_bar.inc(1); 
     }
+
+    encoder.finish().expect("Failed to finish encoder");
 }
 
 fn create_mandelbrot_buffer_image(max_iterations : usize, x_size : usize, y_size : usize, x_pos : f64, y_pos : f64, radius : f64) -> Arc<Mutex<Vec<Vec<usize>>>> {
 
-    let mut buffer = Arc::new(Mutex::new(vec![vec![0 as usize; y_size as usize]; x_size as usize]));
+    let buffer = Arc::new(Mutex::new(vec![vec![0 as usize; y_size as usize]; x_size as usize]));
 
     let aspect : f64 = x_size as f64 / y_size as f64; 
     let x_radius = radius; 
@@ -119,13 +202,13 @@ fn create_mandelbrot_buffer_image(max_iterations : usize, x_size : usize, y_size
 
     buffer
 }
-fn create_frame(frame_index : usize, x_size : usize, y_size : usize, max_iterations : usize, buffer : Arc<Mutex<Vec<Vec<usize>>>>, color_gradient : &colorgrad::Gradient, color_gradient_shift : f64) -> Array3<u8> {
 
-    // let mut arr = Array3::zeros((x_size, y_size, 3 as usize));
-    // let mut arr = Array::<u8, _>::zeros((x_size, y_size, 3).f());
-    // let mut arr = Array::zeros((x_size, y_size, 3)); 
+fn create_frame(x_size : usize, y_size : usize, max_iterations : usize, buffer : &Arc<Mutex<Vec<Vec<usize>>>>, color_gradient : &colorgrad::Gradient, color_gradient_shift : f64) -> Array3<u8> {
+    
+    let mut arr = Array3::<u8>::zeros((y_size, x_size, 3));
 
-    return Array3::from_shape_fn((x_size, y_size, 3), |(x, y, c)| {
+    for x in 0 .. x_size {
+        for y in 0 .. y_size {
             let x : usize = x; 
             let y : usize = y;
 
@@ -136,32 +219,11 @@ fn create_frame(frame_index : usize, x_size : usize, y_size : usize, max_iterati
             g_value = g_value - g_value.floor(); 
 
             let color = color_gradient.at(g_value).to_rgba8();
-            // arr[x][y][0] = color[0];
-            // arr[x][y][1] = color[1];
-            // arr[x][y][2] = color[2];
-            color
+            arr[[y, x, 0]] = color[0];
+            arr[[y, x, 1]] = color[1];
+            arr[[y, x, 2]] = color[2];
+        }
+    }
 
-    });
-    // for x in 0 .. x_size {
-    //     for y in 0 .. y_size {
-    //     }
-    // }
-
-    // arr
-
-    // let mut image_buffer = image::ImageBuffer::new(x_size as u32, y_size as u32);
-
-    // for (x, y, pixel) in image_buffer.enumerate_pixels_mut() {
-
-    //     let mut g_value = (buffer.lock().unwrap()[x as usize][y as usize] as f64) / (max_iterations as f64) + color_gradient_shift;
-
-    //     // We need to do this because we are shifting the value in the previous line. This is to
-    //     // keep the final value between 0 - 1. 
-    //     g_value = g_value - g_value.floor(); 
-
-    //     let color = color_gradient.at(g_value).to_rgba8();
-    //     *pixel = image::Rgb([color[0], color[1], color[2]]);
-    // }
-
-    // image_buffer.save(format!("mandelbrot_{}.png", frame_index)).unwrap();
+    arr
 }

@@ -1,0 +1,32 @@
+[[frames]]
+max_iterations = 28
+x_pos = -0.16
+y_pos = 1.0405
+radius = 0.01
+color_gradient_shift = 0.0
+
+[[frames]]
+max_iterations = 28
+x_pos = -0.15
+y_pos = 1.0405
+radius = 0.01
+color_gradient_shift = 0.7
+
+[[frames]]
+max_iterations = 28
+x_pos = -0.15
+y_pos = 1.0405
+radius = 0.01
+color_gradient_shift = 0.95
+
+[[transitions]]
+from_frame = 0
+to_frame = 1
+interpolation_type = "Linear"
+steps = 60
+
+[[transitions]]
+from_frame = 1
+to_frame = 2
+interpolation_type = "Linear"
+steps = 60
