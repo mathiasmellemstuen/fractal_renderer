@@ -1,0 +1,12 @@
+[package]
+name = "fractal_renderer"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+colorgrad = "0.6.2"
+image = "0.25.1"
+indicatif = "0.17.8"
+rayon = "1.10.0"
+ndarray = "0.15.6"
+video-rs = { version = "0.8", features = ["ndarray"] }
