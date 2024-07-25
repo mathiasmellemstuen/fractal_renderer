@@ -1,14 +1,16 @@
 use rayon::prelude::*;
+use std::f32::consts::PI;
 use std::sync::{Arc, Mutex};
 use ndarray::Array3;
 use video_rs::encode::{Encoder, Settings};
 use video_rs::time::Time;
 use std::path::Path;
 use indicatif::ProgressBar;
-use serde::{Deserialize};
+use serde::Deserialize;
 use toml;
 use std::fs;
 use std::process::exit;
+use std::env; 
 
 #[derive(Debug, Deserialize)]
 struct VideoFrames {
@@ -65,6 +67,14 @@ fn ease_in_out_cubic(time : f64) -> f64 {
     if time < 0.5 {4.0 * time.powi(3)} else {1.0 - (-2.0 * time + 2.0).powi(3) / 2.0}
 }
 
+fn ease_in_sine(time : f64) -> f64 {
+    1.0 - (time * PI as f64 / 2.0).cos()
+}
+
+fn ease_out_sine(time : f64) -> f64 {
+    (time * PI as f64 / 2.0).sin()
+}
+
 fn create_frame_from_lerp(from : &FrameMeta, to : &FrameMeta, time : f64) -> FrameMeta {
 
     let mi : f64 = lerp(from.max_iterations as f64, to.max_iterations as f64, time); 
@@ -86,7 +96,9 @@ fn create_frame_from_lerp(from : &FrameMeta, to : &FrameMeta, time : f64) -> Fra
 enum InterpolationType {
     Linear,
     InOutQuart,
-    InOutCubic
+    InOutCubic,
+    InSine,
+    OutSine
 }
 
 fn interpolate_frames(frame_1 : &FrameMeta, frame_2 : &FrameMeta, steps : usize, mode : &InterpolationType) -> Vec<FrameMeta> {
@@ -105,7 +117,9 @@ fn interpolate_frames(frame_1 : &FrameMeta, frame_2 : &FrameMeta, steps : usize,
         let t : f64 = match mode {
             InterpolationType::Linear => all_steps[step],
             InterpolationType::InOutQuart => ease_in_out_quart(all_steps[step]),
-            InterpolationType::InOutCubic => ease_in_out_cubic(all_steps[step])
+            InterpolationType::InOutCubic => ease_in_out_cubic(all_steps[step]),
+            InterpolationType::InSine => ease_in_sine(all_steps[step]),
+            InterpolationType::OutSine => ease_out_sine(all_steps[step])
         };
 
         all_frames.push(create_frame_from_lerp(&frame_1, &frame_2, t));
@@ -113,8 +127,47 @@ fn interpolate_frames(frame_1 : &FrameMeta, frame_2 : &FrameMeta, steps : usize,
     all_frames
 }
 
+
+fn create_single_image_snapshot(max_iterations : usize, x_size : usize, y_size : usize, x_pos : f64, y_pos : f64, radius : f64, color_gradient : &colorgrad::Gradient, color_gradient_shift : f64) {
+
+    let buffer = create_mandelbrot_buffer_image(max_iterations, x_size, y_size, x_pos, y_pos, radius); 
+    let mut image_buffer = image::ImageBuffer::new(x_size as u32, y_size as u32);
+
+    for (x, y, pixel) in image_buffer.enumerate_pixels_mut() {
+
+            let mut g_value = (buffer.lock().unwrap()[x as usize][y as usize] as f64) / (max_iterations as f64) + color_gradient_shift;
+
+            g_value = g_value - g_value.floor(); 
+
+            let color = color_gradient.at(g_value).to_rgba8();
+            *pixel = image::Rgb([color[0], color[1], color[2]]);
+        }
+
+        image_buffer.save(format!("mandelbrot_snapshot.png")).unwrap();
+}
 fn main() {
     
+    let x_size : usize = 3200; 
+    let y_size : usize = 1800; 
+
+    let color_gradient = colorgrad::sinebow(); 
+
+    let args: Vec<String> = env::args().collect();
+    
+    // In this case, we will create a single frame by values inserted in the command line
+    if args.len() > 1 {
+        
+        let max_iterations : usize = args[1].parse().unwrap();
+        let x_pos : f64 = args[2].parse().unwrap(); 
+        let y_pos : f64 = args[3].parse().unwrap(); 
+        let radius : f64 = args[4].parse().unwrap(); 
+        let color_gradient_shift : f64 = args[5].parse().unwrap(); 
+
+        create_single_image_snapshot(max_iterations, x_size, y_size, x_pos, y_pos, radius, &color_gradient, color_gradient_shift); 
+
+        return; 
+    }
+
     // Reading and parsing frames from the toml file
     let frames_file = "frames.toml"; 
     let frames_file_content = match fs::read_to_string(frames_file) {
@@ -133,10 +186,6 @@ fn main() {
     };
     let frames = video_frames.construct_all_frames(); 
 
-    let x_size : usize = 3200; 
-    let y_size : usize = 1800; 
-
-    let color_gradient = colorgrad::sinebow(); 
 
     let settings = Settings::preset_h264_yuv420p(x_size, y_size, false);
     let mut encoder = Encoder::new(Path::new("mandelbrot.mp4"), settings).expect("Failed to create encoder");
