@@ -7,8 +7,7 @@ pub enum InterpolationType {
     Linear,
     InOutQuart,
     InOutCubic,
-    InSine,
-    OutSine
+    InSine
 }
 
 impl InterpolationType {
@@ -18,7 +17,6 @@ impl InterpolationType {
             InterpolationType::InOutQuart => ease_in_out_quart(time),
             InterpolationType::InOutCubic => ease_in_out_cubic(time),
             InterpolationType::InSine => ease_in_sine(time),
-            InterpolationType::OutSine => ease_out_sine(time)
         }
     }
 }
@@ -33,10 +31,6 @@ fn ease_in_out_cubic(time : f64) -> f64 {
 
 fn ease_in_sine(time : f64) -> f64 {
     1.0 - (time * PI as f64 / 2.0).cos()
-}
-
-fn ease_out_sine(time : f64) -> f64 {
-    (time * PI as f64 / 2.0).sin()
 }
 
 fn lerp(a : f64, b : f64, t : f64) -> f64 {

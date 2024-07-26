@@ -11,6 +11,7 @@ pub fn create_mandelbrot_frame_image(max_iterations : usize, x_size : usize, y_s
 
     buffer.axis_iter_mut(Axis(0)).enumerate().for_each(|(y, mut column)| {
         column.axis_iter_mut(Axis(0)).enumerate().for_each(|(x, mut channels)| {
+
             let x_0 : f64 = (x_pos - x_radius) + (x as f64 / x_size as f64) * ((x_pos + x_radius) - (x_pos - x_radius));
             let y_0 : f64 = (y_pos - y_radius) + (y as f64 / y_size as f64) * ((y_pos + y_radius) - (y_pos - y_radius));
             

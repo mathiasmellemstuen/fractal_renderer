@@ -23,7 +23,7 @@ color_gradient_shift = 0.95
 max_iterations = 150
 x_pos = -0.75
 y_pos = -0.15
-radius = -0.15
+radius = 0.05
 color_gradient_shift = 0.95
 
 [[frames]]
@@ -89,7 +89,7 @@ steps = 180
 [[transitions]]
 from_frame = 2
 to_frame = 3
-interpolation_type = "OutSine"
+interpolation_type = "Linear"
 steps = 180
 
 [[transitions]]
@@ -105,15 +105,15 @@ interpolation_type = "InSine"
 steps = 240
 
 [[transitions]]
-from_frame = 3
+from_frame = 4
 to_frame = 4
 interpolation_type = "Linear"
-steps = 240
+steps = 180
 
 [[transitions]]
 from_frame = 4
 to_frame = 5
-interpolation_type = "OutSine"
+interpolation_type = "InOutCubic"
 steps = 240
 
 [[transitions]]
@@ -149,7 +149,7 @@ steps = 240
 [[transitions]]
 from_frame = 8
 to_frame = 9
-interpolation_type = "OutSine"
+interpolation_type = "InSine"
 steps = 240
 
 [[transitions]]
