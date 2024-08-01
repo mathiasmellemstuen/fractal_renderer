@@ -29,5 +29,6 @@ pub fn mandelbrot(max_iterations : usize, x : f64, y : f64, x_size : f64, y_size
 
         iteration += 1; 
     }
+
     iteration
 }

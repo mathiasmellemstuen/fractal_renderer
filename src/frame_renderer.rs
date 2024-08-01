@@ -22,7 +22,7 @@ pub fn create_frame_image_par(
     buffer.axis_iter_mut(Axis(0)).enumerate().par_bridge().for_each(|(y, mut row)| {
         row.axis_iter_mut(Axis(0)).enumerate().for_each(|(x, mut pixel)| {
             
-            let iterations : usize = fractal_f(max_iterations, x as f64, y as f64, x_pos, y_pos, x_size as f64, y_size as f64, x_radius, y_radius);
+            let iterations : usize = fractal_f(max_iterations, x as f64, y as f64, x_size as f64, y_size as f64, x_pos, y_pos, x_radius, y_radius);
 
             let mut value = (iterations as f64 / max_iterations as f64) + color_gradient_shift; 
             value = value - value.floor();
