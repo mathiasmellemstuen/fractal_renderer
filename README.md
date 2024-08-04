@@ -1,1 +1,1 @@
-# fractal_renderer
+# Fractal Renderer

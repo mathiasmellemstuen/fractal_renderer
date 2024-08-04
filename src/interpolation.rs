@@ -1,5 +1,5 @@
 use serde::Deserialize;
-use std::f32::consts::PI;
+use std::{f64::consts::PI};
 use super::frame_meta::*; 
 
 #[derive(Debug, Deserialize)]
@@ -7,7 +7,9 @@ pub enum InterpolationType {
     Linear,
     InOutQuart,
     InOutCubic,
-    InSine
+    InSine,
+    InOutSine,
+    OutSine
 }
 
 impl InterpolationType {
@@ -17,10 +19,15 @@ impl InterpolationType {
             InterpolationType::InOutQuart => ease_in_out_quart(time),
             InterpolationType::InOutCubic => ease_in_out_cubic(time),
             InterpolationType::InSine => ease_in_sine(time),
+            InterpolationType::InOutSine => ease_in_out_sine(time),
+            InterpolationType::OutSine => ease_out_sine(time)
         }
     }
 }
 
+fn ease_in_out_sine(time : f64) -> f64 {
+    -((PI * time).cos() - 1.0) / 2.0
+}
 fn ease_in_out_quart(time : f64) -> f64{
     if time < 0.5 {8.0 * time.powi(4)} else {1.0 - (-2.0 * time + 2.0).powi(4) / 2.0}
 }
@@ -30,7 +37,10 @@ fn ease_in_out_cubic(time : f64) -> f64 {
 }
 
 fn ease_in_sine(time : f64) -> f64 {
-    1.0 - (time * PI as f64 / 2.0).cos()
+    1.0 - (time * PI / 2.0).cos()
+}
+fn ease_out_sine(time : f64) -> f64 {
+    0.0 - ((time * PI / 2.0).cos()+ PI * 0.5)
 }
 
 fn lerp(a : f64, b : f64, t : f64) -> f64 {
