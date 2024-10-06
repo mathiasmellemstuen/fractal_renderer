@@ -9,7 +9,7 @@ This project is dedicated to rendering mesmerizing videos of fractals. Fractals 
 - [x] Mandelbrot set
 - [x] CPU processing: Parallelization
 - [x] Frame system: A simple system for defining checkpoints, with coordinates, zoom level, duration, interpolation, which will define the frames of the video. 
-- [ ] GPU processing: Vulkan rendering setup and Mandelbrot fragment shader.
+- [ ] GPU processing: W-GPU rendering setup and Mandelbrot fragment shader.
 - [ ] Interactive GUI for visualizing coordinates in the given fractal. 
 - [ ] GUI tools for the frame system.
 
@@ -20,6 +20,8 @@ Until this point, we have two main configuration files
 - [frames.toml](frames.toml) contains defined frames / checkpoints, that can be edited to explore other regions of the fractal. This file also contains transitions, which defines how one frame / checkpoint will transition into the next.
 
 In the terms of building, it is recommended to build in release mode `cargo build --release`, as rendering fractals can be heavy, and the optimizations will significantly speed up the rendering process.
+It is required that `FFmpeg`, `clang` and `pkg-config` are already installed on your system for being able to build. Go [here](https://github.com/zmwangx/rust-ffmpeg/wiki/Notes-on-building#dependencies)
+for further instructions on how to install these dependencies. 
 
 ## Contribute
 

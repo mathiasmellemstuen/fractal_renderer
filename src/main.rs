@@ -6,26 +6,13 @@ use serde::Deserialize;
 use fractal_renderer::video_frames::*;
 use fractal_renderer::mp4::*;
 use fractal_renderer::fractals::*;
-
-fn str_to_colorgrad_gradient(in_str : &str) -> colorgrad::Gradient {
-    match in_str {
-        "sinebow" => colorgrad::sinebow(),
-        "cubehelix_default" => colorgrad::cubehelix_default(), 
-        "turbo" => colorgrad::turbo(),
-        "spectral" => colorgrad::spectral(),
-        "viridis" => colorgrad::viridis(),
-        "magma" => colorgrad::magma(),
-        "rainbow" => colorgrad::rainbow().sharp(10, 0.4),
-        _ => {
-            eprintln!("Color gradient string from properties file is unknown!"); 
-            exit(1);
-        }
-    }
-}
-
+use fractal_renderer::colorgrad_helpers::*;
+use fractal_renderer::gui::*;
 
 fn main() {
-
+    
+    pollster::block_on(start()); 
+    return; 
     // Reading properties from toml file
     let properties_file = "properties.toml"; 
     let properties_file_content = match fs::read_to_string(properties_file) {
@@ -36,7 +23,7 @@ fn main() {
             exit(1); 
         }
     };
-    
+
     #[derive(Debug, Deserialize)]
     struct Properties {
         fractal : String,
@@ -65,6 +52,7 @@ fn main() {
             exit(1); 
         }
     };
+
     let video_frames : VideoFrames = match toml::from_str(&frames_file_content) {
         Ok(c) => c,
         Err(e) => {

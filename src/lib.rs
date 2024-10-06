@@ -6,3 +6,5 @@ pub mod video_frames;
 pub mod frame_renderer;
 pub mod fractals; 
 pub mod mp4;
+pub mod colorgrad_helpers;
+pub mod gui; 
