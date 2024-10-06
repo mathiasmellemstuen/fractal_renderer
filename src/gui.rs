@@ -76,7 +76,7 @@ pub async fn start() {
 
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label : None,
-        source : wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("shaders/shader.wgsl"))),
+        source : wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("shaders/mandelbrot.wgsl"))),
     });
 
     let uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
