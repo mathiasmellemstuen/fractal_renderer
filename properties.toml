@@ -1,5 +1,0 @@
-fractal = "mandelbrot"
-width = 3200
-height = 1800
-frames_per_second = 60
-colorgrad = "rainbow"
