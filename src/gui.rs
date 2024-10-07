@@ -7,11 +7,11 @@ use winit::event_loop::EventLoop;
 
 use wgpu_text::BrushBuilder;
 
+use std::sync::Arc;
+
 use crate::text_section::create_new_text_section;
 use crate::fractal_config::FractalConfig;
 use crate::wgpu_context::WGPUContext; 
-
-use std::sync::Arc;
 
 pub fn start_gui() {
 
@@ -40,7 +40,6 @@ pub fn start_gui() {
     let mut last_text_update_time : std::time::Instant = std::time::Instant::now();
 
     let mut fps : f64 = 0.0; 
-    let mut current_cursor_position : (f64, f64) = (0.0, 0.0); 
     let mut last_cursor_position : (f64, f64) = (0.0, 0.0); 
     let mut is_pressed : bool = false; 
     
@@ -79,8 +78,7 @@ pub fn start_gui() {
                         fractal_config.as_mut().unwrap().max_iterations = (fractal_config.as_ref().unwrap().max_iterations as i32 * 2).max(2).min(8192) as u32;
                 }
                 WindowEvent::CursorMoved { position, .. } => {
-                    current_cursor_position = (position.x, position.y); 
-                    let position_delta = (current_cursor_position.0 - last_cursor_position.0, current_cursor_position.1 - last_cursor_position.1);
+                    let position_delta = (position.x - last_cursor_position.0, position.y - last_cursor_position.1);
                     
                     if is_pressed {
                         fractal_config.as_mut().unwrap().cursor_pos_x = fractal_config.as_ref().unwrap().cursor_pos_x + 2.0 * (position_delta.0 * fractal_config.as_ref().unwrap().zoom as f64 / wgpu_context.surface_config.width as f64) as f32;
@@ -151,7 +149,7 @@ pub fn start_gui() {
 
                     // The recording of commands to the command buffer in the render pass needs to
                     // end before it is submitted to the queue. The recording ends implicitly when it exits
-                    // its scope. Therefore, the underlying code is contained in its own scope. Each render pass recording must
+                    // its scope. Therefore, the underlying code is contained within its own scope. Each render pass recording must
                     // therefore happen in its respective scope. 
                     {
                         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
