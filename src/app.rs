@@ -13,7 +13,7 @@ use crate::text_section::create_new_text_section;
 use crate::fractal_config::FractalConfig;
 use crate::wgpu_context::WGPUContext; 
 
-pub fn start_gui() {
+pub fn start_app() {
 
     let event_loop = EventLoop::new().unwrap(); 
     let builder = winit::window::WindowBuilder::new()

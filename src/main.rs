@@ -1,5 +1,5 @@
-use fractal_renderer::gui::*;
+use fractal_renderer::app::*;
 
 fn main() {
-    start_gui();
+    start_app();
 }
