@@ -1,10 +1,4 @@
-pub mod interpolation;
-pub mod fractal_function_type;
-pub mod transition;
-pub mod frame_meta; 
-pub mod video_frames; 
-pub mod frame_renderer;
-pub mod fractals; 
-pub mod mp4;
-pub mod colorgrad_helpers;
+pub mod fractal_config;
+pub mod text_section;
+pub mod wgpu_context; 
 pub mod gui; 

@@ -5,183 +5,51 @@ use winit::event::MouseButton;
 use winit::event::WindowEvent;
 use winit::event_loop::EventLoop;
 
-use wgpu_text::glyph_brush::Section as TextSection;
-use wgpu_text::glyph_brush::Text;
 use wgpu_text::BrushBuilder;
-use wgpu_text::TextBrush; 
 
-use std::borrow::Cow; 
+use crate::text_section::create_new_text_section;
+use crate::fractal_config::FractalConfig;
+use crate::wgpu_context::WGPUContext; 
 
-use encase::ShaderType; 
+use std::sync::Arc;
 
-
-#[derive(Debug, ShaderType)]
-struct AppState {
-    pub cursor_pos_x : f32, 
-    pub cursor_pos_y : f32,
-    pub zoom : f32,
-    pub max_iterations : u32
-}
-
-impl AppState {
-    fn as_wgsl_bytes(&self) -> encase::internal::Result<Vec<u8>> {
-        let mut buffer = encase::UniformBuffer::new(Vec::new());
-        buffer.write(self)?;
-        Ok(buffer.into_inner())
-    }
-}
-
-impl Default for AppState {
-    fn default() -> Self {
-        AppState {
-            cursor_pos_x: -1.5,
-            cursor_pos_y: -1.0,
-            zoom: 1.2,
-            max_iterations: 128,
-        }
-    }
-}
-
-pub async fn start() {
+pub fn start_gui() {
 
     let event_loop = EventLoop::new().unwrap(); 
-    let mut builder = winit::window::WindowBuilder::new()
+    let builder = winit::window::WindowBuilder::new()
         .with_title("Fractal Renderer")
         .with_inner_size(PhysicalSize::new(1920, 1080));
 
-    let window = builder.build(&event_loop).unwrap();
+    let window = Arc::new(builder.build(&event_loop).unwrap());
 
-    let mut size = window.inner_size(); 
-    size.width = size.width.max(1);
-    size.height = size.height.max(1);
-
-    let instance = wgpu::Instance::default();
-    let surface = instance.create_surface(&window).unwrap();
-
-    let adapter = instance.request_adapter(&wgpu::RequestAdapterOptions {
-        power_preference: wgpu::PowerPreference::default(),
-        force_fallback_adapter: false,
-        compatible_surface: Some(&surface),
-    }).await.expect("Failed to find an appropriate adapter!");
-
-
-    let (device, queue) = adapter.request_device(&wgpu::DeviceDescriptor {
-        label : None, 
-        required_features : wgpu::Features::empty(),
-        required_limits : wgpu::Limits::downlevel_webgl2_defaults().using_resolution(adapter.limits()),
-        memory_hints : wgpu::MemoryHints::MemoryUsage,
-    },
-    None
-    ).await.expect("Failed to create device");
-
-    let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-        label : None,
-        source : wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("shaders/mandelbrot.wgsl"))),
-    });
-
-    let uniform_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-        label : None, 
-        size : std::mem::size_of::<AppState>() as u64,
-        usage : wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        mapped_at_creation : false,
-    });
-
-    let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-        label : None, 
-        entries : &[wgpu::BindGroupLayoutEntry {
-            binding : 0, 
-            visibility : wgpu::ShaderStages::VERTEX_FRAGMENT,
-            ty : wgpu::BindingType::Buffer {
-                ty : wgpu::BufferBindingType::Uniform,
-                has_dynamic_offset : false,
-                min_binding_size : None,
-            },
-            count : None,
-        }],
-    });
-
-    let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label : None,
-        layout : &bind_group_layout,
-        entries : &[wgpu::BindGroupEntry {
-            binding : 0,
-            resource : wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                buffer : &uniform_buffer,
-                offset : 0,
-                size : None,
-            }),
-        }],
-    });
-
-    let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-        label : None, 
-        bind_group_layouts : &[&bind_group_layout],
-        push_constant_ranges : &[],
-    });
-
-    let swapchain_capabilities = surface.get_capabilities(&adapter); 
-    let swapchain_format = swapchain_capabilities.formats[0];
-
-    let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-        label : None, 
-        layout : Some(&pipeline_layout),
-        vertex : wgpu::VertexState {
-            module : &shader,
-            entry_point : "vs_main",
-            buffers : &[],
-            compilation_options : Default::default(),
-        },
-        fragment : Some(wgpu::FragmentState {
-            module : &shader,
-            entry_point : "fs_main",
-            compilation_options : Default::default(), 
-            targets : &[Some(swapchain_format.into())],
-        }),
-        primitive : wgpu::PrimitiveState::default(),
-        depth_stencil : None, 
-        multisample : wgpu::MultisampleState::default(),
-        multiview : None,
-        cache : None,
-    });
-
-    let mut config = surface.get_default_config(&adapter, size.width, size.height).unwrap();
-    surface.configure(&device, &config);
+    let mut wgpu_context = WGPUContext::setup(window.clone());
 
     // Setting up text brush
     let mut brush = BrushBuilder::using_font_bytes(include_bytes!("fonts/Roboto/Roboto-Regular.ttf")).unwrap()
-        .build(&device, config.width, config.height, config.format);
+        .build(&wgpu_context.device, wgpu_context.surface_config.width, wgpu_context.surface_config.height, wgpu_context.surface_config.format);
 
+    // Creating the title text section
     let version = env!("CARGO_PKG_VERSION"); 
     let title_text = format!("Fractal Renderer {}", version); 
-    let text_section_title = TextSection::default().add_text(Text::new(&title_text)
-        .with_color([1.0, 1.0, 1.0, 1.0])
-        .with_scale(24.0)
-    ).with_screen_position((10.0, 10.0)); 
+    let text_section_title = create_new_text_section(&title_text, (10.0, 10.0));
+    let text_update_time_seconds : f64 = 1.0; 
 
-    
-    let window = &window; 
-
-    let mut app_state = Some(AppState::default()); 
+    let mut fractal_config = Some(FractalConfig::default()); 
 
     let mut last_frame_time : std::time::Instant = std::time::Instant::now();
-    let mut fps : f64 = 0.0; 
-    let mut text_update_time_seconds : f64 = 1.0; 
     let mut last_text_update_time : std::time::Instant = std::time::Instant::now();
 
+    let mut fps : f64 = 0.0; 
     let mut current_cursor_position : (f64, f64) = (0.0, 0.0); 
     let mut last_cursor_position : (f64, f64) = (0.0, 0.0); 
-
     let mut is_pressed : bool = false; 
     
     event_loop.run(move |event, target| {
 
-        // A hacky way of making the current scope borrow all the resources, this is needed to make
-        // sure that all resources are properly cleaned up between the frames. 
-        let _ = (&instance, &adapter, &shader, &pipeline_layout);
-
         if let Event::WindowEvent { window_id: _, event } = event {
             match event {
                 
+                // Listening for an event where the backspace key is pressed
                 WindowEvent::KeyboardInput {
 
                     event:
@@ -193,9 +61,10 @@ pub async fn start() {
                         },
                     ..
                 } => {
-                        app_state.as_mut().unwrap().max_iterations = (app_state.as_ref().unwrap().max_iterations as i32 / 2).max(2).min(8192) as u32;
+                        fractal_config.as_mut().unwrap().max_iterations = (fractal_config.as_ref().unwrap().max_iterations as i32 / 2).max(2).min(8192) as u32;
                 }
 
+                // Listening for an event where the space key is pressed
                 WindowEvent::KeyboardInput {
 
                     event:
@@ -207,16 +76,15 @@ pub async fn start() {
                         },
                     ..
                 } => {
-                        app_state.as_mut().unwrap().max_iterations = (app_state.as_ref().unwrap().max_iterations as i32 * 2).max(2).min(8192) as u32;
+                        fractal_config.as_mut().unwrap().max_iterations = (fractal_config.as_ref().unwrap().max_iterations as i32 * 2).max(2).min(8192) as u32;
                 }
                 WindowEvent::CursorMoved { position, .. } => {
                     current_cursor_position = (position.x, position.y); 
+                    let position_delta = (current_cursor_position.0 - last_cursor_position.0, current_cursor_position.1 - last_cursor_position.1);
                     
                     if is_pressed {
-                        let position_delta = (current_cursor_position.0 - last_cursor_position.0, current_cursor_position.1 - last_cursor_position.1);
-
-                        app_state.as_mut().unwrap().cursor_pos_x = app_state.as_ref().unwrap().cursor_pos_x + 2.0 * (position_delta.0 * app_state.as_ref().unwrap().zoom as f64 / config.width as f64) as f32;
-                        app_state.as_mut().unwrap().cursor_pos_y = app_state.as_ref().unwrap().cursor_pos_y + 2.0 * (position_delta.1 * app_state.as_ref().unwrap().zoom as f64 / config.height as f64) as f32;
+                        fractal_config.as_mut().unwrap().cursor_pos_x = fractal_config.as_ref().unwrap().cursor_pos_x + 2.0 * (position_delta.0 * fractal_config.as_ref().unwrap().zoom as f64 / wgpu_context.surface_config.width as f64) as f32;
+                        fractal_config.as_mut().unwrap().cursor_pos_y = fractal_config.as_ref().unwrap().cursor_pos_y + 2.0 * (position_delta.1 * fractal_config.as_ref().unwrap().zoom as f64 / wgpu_context.surface_config.height as f64) as f32;
                     }
 
                     last_cursor_position = (position.x, position.y); 
@@ -238,71 +106,48 @@ pub async fn start() {
                             
                             let dir : f32 = if y > 0.0 {1.0} else {-1.0};
 
-                            let new_value : f32 = app_state.as_ref().unwrap().zoom + 0.1 * dir * app_state.as_ref().unwrap().zoom; 
-                            app_state.as_mut().unwrap().zoom = new_value;
+                            let new_value : f32 = fractal_config.as_ref().unwrap().zoom + 0.1 * dir * fractal_config.as_ref().unwrap().zoom as f32; 
+                            fractal_config.as_mut().unwrap().zoom = new_value;
                         }
                         _=> {}
                     }
                 }
                 WindowEvent::Resized(new_size) => {
-                    config.width = new_size.width.max(1); 
-                    config.height = new_size.height.max(1); 
+                    wgpu_context.surface_config.width = new_size.width.max(1); 
+                    wgpu_context.surface_config.height = new_size.height.max(1); 
 
-                    surface.configure(&device, &config);
+                    fractal_config.as_mut().unwrap().resolution_x = wgpu_context.surface_config.width as f32; 
+                    fractal_config.as_mut().unwrap().resolution_y = wgpu_context.surface_config.height as f32; 
+
+                    wgpu_context.surface.configure(&wgpu_context.device, &wgpu_context.surface_config);
 
                     window.request_redraw();
                 }
                 WindowEvent::RedrawRequested => {
                     
+                    // Calculating fps
                     let time_between_frames_micros : f64 = last_frame_time.elapsed().as_micros() as f64; 
-                
-                    last_frame_time = std::time::Instant::now(); 
-                    
+                    last_frame_time = std::time::Instant::now();
+
                     if last_text_update_time.elapsed().as_secs_f64() > text_update_time_seconds {
 
                         last_text_update_time = std::time::Instant::now(); 
                         fps = 1000.0 * 1000.0 / time_between_frames_micros; 
                     }
 
-                    let fps_text = format!("FPS: {:.2}", fps);
-                    let text_section_fps = TextSection::default().add_text(Text::new(&fps_text)
-                        .with_color([1.0, 1.0, 1.0, 1.0])
-                        .with_scale(24.0)
-                    ).with_screen_position((10.0, 35.0)); 
-
-                    let state_ref = app_state.as_ref().unwrap(); 
-                    
-                    let x_pos_text = format!("x: {}", state_ref.cursor_pos_x);
-                    let text_section_x_pos = TextSection::default().add_text(Text::new(&x_pos_text)
-                        .with_color([1.0, 1.0, 1.0, 1.0])
-                        .with_scale(24.0)
-                    ).with_screen_position((10.0, 65.0)); 
-                    
-                    let y_pos_text = format!("y: {}", state_ref.cursor_pos_y);
-                    let text_section_y_pos = TextSection::default().add_text(Text::new(&y_pos_text)
-                        .with_color([1.0, 1.0, 1.0, 1.0])
-                        .with_scale(24.0)
-                    ).with_screen_position((10.0, 95.0)); 
-
-                    let max_iterations_text = format!("max iterations: {}", state_ref.max_iterations);
-                    let text_section_max_iterations = TextSection::default().add_text(Text::new(&max_iterations_text)
-                        .with_color([1.0, 1.0, 1.0, 1.0])
-                        .with_scale(24.0)
-                    ).with_screen_position((10.0, 120.0)); 
-
-                    let zoom_text = format!("zoom: {}", state_ref.zoom);
-                    let text_section_zoom = TextSection::default().add_text(Text::new(&zoom_text)
-                        .with_color([1.0, 1.0, 1.0, 1.0])
-                        .with_scale(24.0)
-                    ).with_screen_position((10.0, 145.0)); 
-
-                    let frame = surface.get_current_texture().expect("Failed to aquire swapchain texture");
+                    // Aquire view descriptor and swapchain texture to create encoder (i.e. command
+                    // buffer). This will later be used to create the two render-passes in the
+                    // application.
+                    let frame = wgpu_context.surface.get_current_texture().expect("Failed to aquire swapchain texture");
                     let view = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
-                    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    let mut encoder = wgpu_context.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
                         label : None,
                     });
                     
-                    queue.write_buffer(&uniform_buffer, 0, &state_ref.as_wgsl_bytes().expect("Could not translate to WGSL bytes."));
+
+                    // Creating a reference to the fractal_config and writing it to the uniform buffer 
+                    let fractal_config_ref = fractal_config.as_ref().unwrap(); 
+                    wgpu_context.queue.write_buffer(&wgpu_context.uniform_buffer, 0, &fractal_config_ref.as_wgsl_bytes().expect("Could not translate to WGSL bytes."));
 
                     // The recording of commands to the command buffer in the render pass needs to
                     // end before it is submitted to the queue. The recording ends implicitly when it exits
@@ -323,16 +168,50 @@ pub async fn start() {
                                 timestamp_writes : None,
                                 occlusion_query_set : None,
                         });
-                        render_pass.set_pipeline(&render_pipeline); 
+
+                        render_pass.set_pipeline(&wgpu_context.pipeline); 
                         
-                        render_pass.set_bind_group(0, &bind_group, &[]);
+                        // Set bind group to binding 0, binding the uniform buffer with
+                        // fractal_config data to binding 0, set 0 in the shader
+                        render_pass.set_bind_group(0, &wgpu_context.bind_group, &[]);
+
+                        // Making a draw call with 6 vertices (2x triangles). This will draw the
+                        // mandelbrot set, using the mandelbrot shader spesified in the render
+                        // pipeline.
                         render_pass.draw(0..6, 0..1); 
                     }
 
-                    // Queueing all the text section on the brush
-                    brush.queue(&device, &queue, [&text_section_title, &text_section_fps, &text_section_x_pos, &text_section_y_pos, &text_section_max_iterations, &text_section_zoom]).unwrap(); 
+                    // Creating GUI text sections 
+                    let fps_text = format!("FPS: {:.2}", fps);
+                    let text_section_fps  = create_new_text_section(&fps_text, (10.0, 35.0)); 
+                    
+                    let x_pos_text = format!("Re(z): {}", fractal_config_ref.cursor_pos_x);
+                    let text_section_x_pos = create_new_text_section(&x_pos_text, (10.0, 65.0));
 
-                    // Another renderpass, exclusively for the foreground text
+                    let y_pos_text = format!("Im(z): {}", fractal_config_ref.cursor_pos_y);
+                    let text_section_y_pos = create_new_text_section(&y_pos_text, (10.0, 95.0)); 
+
+                    let max_iterations_text = format!("max iterations: {}", fractal_config_ref.max_iterations);
+
+                    let text_section_max_iterations = create_new_text_section(&max_iterations_text, (10.0, 120.0)); 
+
+                    let zoom_text = format!("zoom: {}", fractal_config_ref.zoom);
+                    let text_section_zoom = create_new_text_section(&zoom_text, (10.0, 145.0)); 
+
+                    // Queueing all the text section on the wgpu_text brush
+                    brush.queue(&wgpu_context.device, &wgpu_context.queue,
+                        [
+                            &text_section_title,
+                            &text_section_fps,
+                            &text_section_x_pos,
+                            &text_section_y_pos,
+                            &text_section_max_iterations,
+                            &text_section_zoom
+
+                        ]).unwrap(); 
+
+                    // Another renderpass, exclusively used for the foreground text on top of the
+                    // previous renderpass.
                     {
 
                         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -349,12 +228,13 @@ pub async fn start() {
                                 timestamp_writes : None,
                                 occlusion_query_set : None,
                         });
-                        render_pass.set_pipeline(&render_pipeline); 
                     
                         brush.draw(&mut render_pass); 
                     }
-
-                    queue.submit(Some(encoder.finish())); 
+                    
+                    // Submitting renderpasses in commandbuffer / encoder, and calling present for
+                    // scheduling the next step in swapchain.
+                    wgpu_context.queue.submit(Some(encoder.finish())); 
                     frame.present(); 
 
                     // Requesting another redraw when we are done drawing this frame
