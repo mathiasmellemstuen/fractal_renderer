@@ -1,6 +1,6 @@
 # Fractal Renderer
 
-This project is dedicated to rendering fractals. Fractals are intricate, self-similar patterns that exhibit complexity at every scale, and creating animations of these patterns can produce stunning visual effects. This project is under development, where so far, only the mandelbrot set is covered. 
+This project is dedicated to rendering fractals. Fractals are intricate, self-similar patterns that exhibit complexity at every scale, and rendering these patterns can produce stunning visual effects. This project is under development, where so far, only the mandelbrot set is covered. 
 
 ## Building
 
