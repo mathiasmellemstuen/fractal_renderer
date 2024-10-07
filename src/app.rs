@@ -25,7 +25,7 @@ pub fn start_app() {
     let mut wgpu_context = WGPUContext::setup(window.clone());
 
     // Setting up text brush
-    let mut brush = BrushBuilder::using_font_bytes(include_bytes!("fonts/Roboto/Roboto-Regular.ttf")).unwrap()
+    let mut brush = BrushBuilder::using_font_bytes(include_bytes!("../fonts/Roboto/Roboto-Regular.ttf")).unwrap()
         .build(&wgpu_context.device, wgpu_context.surface_config.width, wgpu_context.surface_config.height, wgpu_context.surface_config.format);
 
     // Creating the title text section
